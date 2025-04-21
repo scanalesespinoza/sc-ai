@@ -1,9 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
   <meta charset="UTF-8" />
-  <title>🎮 Player Tracker (WebSocket + Smart Retry + ID)</title>
+  <title>🎮 Player Tracker (Smart WebSocket)</title>
   <style>
     body {
       margin: 0;
@@ -26,20 +25,9 @@
       margin-bottom: 1rem;
     }
 
-    .green {
-      background: #2e7d32;
-      color: white;
-    }
-
-    .yellow {
-      background: #f9a825;
-      color: black;
-    }
-
-    .red {
-      background: #c62828;
-      color: white;
-    }
+    .green { background: #2e7d32; color: white; }
+    .yellow { background: #f9a825; color: black; }
+    .red { background: #c62828; color: white; }
 
     button {
       padding: 0.6rem 1.2rem;
@@ -90,7 +78,6 @@
     }
   </style>
 </head>
-
 <body>
   <h1>🎯 Track the Player (Real-Time)</h1>
   <div id="status" class="yellow">Connecting...</div>
@@ -113,20 +100,32 @@
   <script>
     const grid = document.getElementById('grid');
     const statusDiv = document.getElementById('status');
-    const retryBtn = document.getElementById('toggleRetry');
     const sessionIdSpan = document.getElementById('sessionId');
     const sessionCountSpan = document.getElementById('sessionCount');
     const nameInput = document.getElementById('displayName');
+    const toggleRetryBtn = document.getElementById('toggleRetry');
 
     const tiles = [];
     let lastPlayerIndex = -1;
-    let sessionId = null;
-    let ws = null;
-    let retryDelay = 5000;
-    let reconnectInterval = null;
-    let reconnectCountdown = null;
-    let retryEnabled = true;
     const messageQueue = [];
+    const retryDelay = 5000;
+    let reconnectCountdown = null;
+    let reconnectTimer = null;
+
+    const connectionState = {
+      retryEnabled: true,
+      ws: null,
+      get status() {
+        if (!this.ws) return 'disconnected';
+        switch (this.ws.readyState) {
+          case WebSocket.CONNECTING: return 'connecting';
+          case WebSocket.OPEN: return 'connected';
+          case WebSocket.CLOSING: return 'closing';
+          case WebSocket.CLOSED: return 'disconnected';
+          default: return 'unknown';
+        }
+      }
+    };
 
     for (let y = 0; y < 100; y++) {
       for (let x = 0; x < 100; x++) {
@@ -150,6 +149,27 @@
       }
     }
 
+    function updateStatusFromState() {
+      switch (connectionState.status) {
+        case 'connected':
+          updateStatus('green', '🟢 Connected (Real-Time)');
+          break;
+        case 'connecting':
+          updateStatus('yellow', '🟡 Connecting...');
+          break;
+        case 'closing':
+          updateStatus('yellow', '🟡 Closing connection...');
+          break;
+        case 'disconnected':
+          updateStatus('red', connectionState.retryEnabled
+            ? '🔴 Disconnected... retrying soon'
+            : '🔴 Disconnected (retry paused)');
+          break;
+        default:
+          updateStatus('red', '❓ Unknown state');
+      }
+    }
+
     function updateStatus(color, text) {
       statusDiv.className = color;
       statusDiv.textContent = text;
@@ -158,6 +178,7 @@
     function startCountdown(seconds) {
       let remaining = seconds;
       updateStatus('red', `🔴 Disconnected... retrying in ${remaining}s`);
+      clearInterval(reconnectCountdown);
       reconnectCountdown = setInterval(() => {
         remaining--;
         if (remaining > 0) {
@@ -169,65 +190,58 @@
     }
 
     function tryReconnect() {
-      if (retryEnabled) {
+      if (connectionState.retryEnabled && connectionState.status === 'disconnected') {
         startCountdown(retryDelay / 1000);
-        reconnectInterval = setTimeout(() => {
-          connectWebSocket();
-        }, retryDelay);
-      } else {
-        updateStatus('red', `🔴 Disconnected (retry paused)`);
+        clearTimeout(reconnectTimer);
+        reconnectTimer = setTimeout(connectWebSocket, retryDelay);
       }
     }
 
     function connectWebSocket() {
-      if (ws && ws.readyState !== WebSocket.CLOSED) return;
+      clearTimeout(reconnectTimer);
+      if (connectionState.ws && connectionState.ws.readyState !== WebSocket.CLOSED) return;
 
-      ws = new WebSocket(`ws://${location.host}/player`);
+      connectionState.ws = new WebSocket(`ws://${location.host}/player`);
 
-      ws.onopen = () => {
+      connectionState.ws.onopen = () => {
         console.log("🔌 Connected");
-        updateStatus('green', '🟢 Connected (Real-Time)');
+        updateStatusFromState();
         clearInterval(reconnectCountdown);
-        clearTimeout(reconnectInterval);
+        clearTimeout(reconnectTimer);
 
         while (messageQueue.length > 0) {
-          ws.send(messageQueue.shift());
+          connectionState.ws.send(messageQueue.shift());
         }
 
-        // If name was set before reconnect, send it again
         const name = nameInput.value.trim();
-        if (name) {
-          ws.send(`name:${name}`);
-        }
+        if (name) connectionState.ws.send(`name:${name}`);
       };
 
-      ws.onmessage = (event) => {
+      connectionState.ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-
-          if (data.sessionId) {
-            sessionId = data.sessionId;
-            sessionIdSpan.textContent = sessionId;
-          } else if (data.type === "sessionCount") {
-            sessionCountSpan.textContent = data.count;
-          } else if (typeof data.x === "number" && typeof data.y === "number") {
+          if (data.sessionId) sessionIdSpan.textContent = data.sessionId;
+          else if (data.type === "sessionCount") sessionCountSpan.textContent = data.count;
+          else if (typeof data.x === "number" && typeof data.y === "number") {
             updatePlayer(data.x, data.y);
           }
-
         } catch (e) {
           console.error("Invalid message format", e);
         }
       };
 
-      ws.onerror = (err) => {
-        console.warn("⚠️ WebSocket error", err);
-        updateStatus('yellow', '🟡 Connection error...');
+      connectionState.ws.onerror = () => {
+        console.warn("⚠️ WebSocket error");
+        updateStatusFromState();
       };
 
-      ws.onclose = () => {
+      connectionState.ws.onclose = () => {
         console.warn("🔌 WebSocket closed");
+        updateStatusFromState();
         tryReconnect();
       };
+
+      updateStatusFromState();
     }
 
     document.getElementById('getBtn').addEventListener('click', () => {
@@ -235,35 +249,36 @@
       const randomY = Math.floor(Math.random() * 100);
       const msg = `move:${randomX},${randomY}`;
 
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(msg);
+      if (connectionState.ws && connectionState.ws.readyState === WebSocket.OPEN) {
+        connectionState.ws.send(msg);
       } else {
-        console.warn("⏳ WebSocket not ready, queuing message");
         messageQueue.push(msg);
-      }
-    });
-
-    retryBtn.addEventListener('click', () => {
-      retryEnabled = !retryEnabled;
-      retryBtn.textContent = retryEnabled ? '🛑 Stop Retry' : '▶️ Start Retry';
-      if (retryEnabled) {
-        loadSessions();
-      } else {
-        clearInterval(retryCountdown);
-        clearTimeout(retryTimer);
-        updateStatus('red', '🔴 Retry paused');
+        console.warn("⏳ WebSocket not ready, queued move");
       }
     });
 
     nameInput.addEventListener('change', () => {
       const name = nameInput.value.trim();
-      if (ws && ws.readyState === WebSocket.OPEN && name) {
-        ws.send(`name:${name}`);
+      if (connectionState.ws && connectionState.ws.readyState === WebSocket.OPEN && name) {
+        connectionState.ws.send(`name:${name}`);
       }
+    });
+
+    toggleRetryBtn.addEventListener('click', () => {
+      connectionState.retryEnabled = !connectionState.retryEnabled;
+      toggleRetryBtn.textContent = connectionState.retryEnabled ? '🛑 Stop Retry' : '▶️ Start Retry';
+
+      if (connectionState.retryEnabled && connectionState.status === 'disconnected') {
+        tryReconnect();
+      } else if (!connectionState.retryEnabled) {
+        clearTimeout(reconnectTimer);
+        clearInterval(reconnectCountdown);
+      }
+
+      updateStatusFromState();
     });
 
     connectWebSocket();
   </script>
 </body>
-
 </html>
