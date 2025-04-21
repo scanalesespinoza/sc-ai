@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <title>🎮 Player Tracker (Smart WebSocket)</title>
@@ -25,9 +26,20 @@
       margin-bottom: 1rem;
     }
 
-    .green { background: #2e7d32; color: white; }
-    .yellow { background: #f9a825; color: black; }
-    .red { background: #c62828; color: white; }
+    .green {
+      background: #2e7d32;
+      color: white;
+    }
+
+    .yellow {
+      background: #f9a825;
+      color: black;
+    }
+
+    .red {
+      background: #c62828;
+      color: white;
+    }
 
     button {
       padding: 0.6rem 1.2rem;
@@ -78,6 +90,7 @@
     }
   </style>
 </head>
+
 <body>
   <h1>🎯 Track the Player (Real-Time)</h1>
   <div id="status" class="yellow">Connecting...</div>
@@ -97,188 +110,74 @@
 
   <div id="grid"></div>
 
-  <script>
-    const grid = document.getElementById('grid');
+  <script type="module">
+    import { RealtimeClient } from './realtime-client.js';
+
     const statusDiv = document.getElementById('status');
+    const toggleRetryBtn = document.getElementById('toggleRetry');
+    const nameInput = document.getElementById('displayName');
     const sessionIdSpan = document.getElementById('sessionId');
     const sessionCountSpan = document.getElementById('sessionCount');
-    const nameInput = document.getElementById('displayName');
-    const toggleRetryBtn = document.getElementById('toggleRetry');
 
-    const tiles = [];
-    let lastPlayerIndex = -1;
-    const messageQueue = [];
-    const retryDelay = 5000;
-    let reconnectCountdown = null;
-    let reconnectTimer = null;
-
-    const connectionState = {
-      retryEnabled: true,
-      ws: null,
-      get status() {
-        if (!this.ws) return 'disconnected';
-        switch (this.ws.readyState) {
-          case WebSocket.CONNECTING: return 'connecting';
-          case WebSocket.OPEN: return 'connected';
-          case WebSocket.CLOSING: return 'closing';
-          case WebSocket.CLOSED: return 'disconnected';
-          default: return 'unknown';
+    const client = new RealtimeClient({
+      url: `ws://${location.host}/player`,
+      retryDelay: 5000,
+      onStatusChange: (color, text) => {
+        statusDiv.className = color;
+        statusDiv.textContent = text;
+      },
+      onMessage: (data) => {
+        if (data.sessionId) {
+          sessionIdSpan.textContent = data.sessionId;
+        } else if (data.type === 'sessionCount') {
+          sessionCountSpan.textContent = data.count;
+        } else if (typeof data.x === 'number' && typeof data.y === 'number') {
+          updatePlayer(data.x, data.y);
         }
       }
-    };
+    });
+
+    // Grid init & player movement (same as before)
+    const grid = document.getElementById('grid');
+    const tiles = [];
+    let lastPlayerIndex = -1;
 
     for (let y = 0; y < 100; y++) {
       for (let x = 0; x < 100; x++) {
         const tile = document.createElement('div');
         tile.classList.add('tile');
-        tile.dataset.x = x;
-        tile.dataset.y = y;
-        tiles.push(tile);
         grid.appendChild(tile);
+        tiles.push(tile);
       }
     }
 
     function updatePlayer(x, y) {
       const index = y * 100 + x;
-      if (lastPlayerIndex !== -1 && tiles[lastPlayerIndex]) {
-        tiles[lastPlayerIndex].classList.remove('player');
-      }
-      if (tiles[index]) {
-        tiles[index].classList.add('player');
-        lastPlayerIndex = index;
-      }
-    }
-
-    function updateStatusFromState() {
-      switch (connectionState.status) {
-        case 'connected':
-          updateStatus('green', '🟢 Connected (Real-Time)');
-          break;
-        case 'connecting':
-          updateStatus('yellow', '🟡 Connecting...');
-          break;
-        case 'closing':
-          updateStatus('yellow', '🟡 Closing connection...');
-          break;
-        case 'disconnected':
-          updateStatus('red', connectionState.retryEnabled
-            ? '🔴 Disconnected... retrying soon'
-            : '🔴 Disconnected (retry paused)');
-          break;
-        default:
-          updateStatus('red', '❓ Unknown state');
-      }
-    }
-
-    function updateStatus(color, text) {
-      statusDiv.className = color;
-      statusDiv.textContent = text;
-    }
-
-    function startCountdown(seconds) {
-      let remaining = seconds;
-      updateStatus('red', `🔴 Disconnected... retrying in ${remaining}s`);
-      clearInterval(reconnectCountdown);
-      reconnectCountdown = setInterval(() => {
-        remaining--;
-        if (remaining > 0) {
-          updateStatus('red', `🔴 Disconnected... retrying in ${remaining}s`);
-        } else {
-          clearInterval(reconnectCountdown);
-        }
-      }, 1000);
-    }
-
-    function tryReconnect() {
-      if (connectionState.retryEnabled && connectionState.status === 'disconnected') {
-        startCountdown(retryDelay / 1000);
-        clearTimeout(reconnectTimer);
-        reconnectTimer = setTimeout(connectWebSocket, retryDelay);
-      }
-    }
-
-    function connectWebSocket() {
-      clearTimeout(reconnectTimer);
-      if (connectionState.ws && connectionState.ws.readyState !== WebSocket.CLOSED) return;
-
-      connectionState.ws = new WebSocket(`ws://${location.host}/player`);
-
-      connectionState.ws.onopen = () => {
-        console.log("🔌 Connected");
-        updateStatusFromState();
-        clearInterval(reconnectCountdown);
-        clearTimeout(reconnectTimer);
-
-        while (messageQueue.length > 0) {
-          connectionState.ws.send(messageQueue.shift());
-        }
-
-        const name = nameInput.value.trim();
-        if (name) connectionState.ws.send(`name:${name}`);
-      };
-
-      connectionState.ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data.sessionId) sessionIdSpan.textContent = data.sessionId;
-          else if (data.type === "sessionCount") sessionCountSpan.textContent = data.count;
-          else if (typeof data.x === "number" && typeof data.y === "number") {
-            updatePlayer(data.x, data.y);
-          }
-        } catch (e) {
-          console.error("Invalid message format", e);
-        }
-      };
-
-      connectionState.ws.onerror = () => {
-        console.warn("⚠️ WebSocket error");
-        updateStatusFromState();
-      };
-
-      connectionState.ws.onclose = () => {
-        console.warn("🔌 WebSocket closed");
-        updateStatusFromState();
-        tryReconnect();
-      };
-
-      updateStatusFromState();
+      if (lastPlayerIndex !== -1) tiles[lastPlayerIndex].classList.remove('player');
+      tiles[index].classList.add('player');
+      lastPlayerIndex = index;
     }
 
     document.getElementById('getBtn').addEventListener('click', () => {
       const randomX = Math.floor(Math.random() * 100);
       const randomY = Math.floor(Math.random() * 100);
-      const msg = `move:${randomX},${randomY}`;
-
-      if (connectionState.ws && connectionState.ws.readyState === WebSocket.OPEN) {
-        connectionState.ws.send(msg);
-      } else {
-        messageQueue.push(msg);
-        console.warn("⏳ WebSocket not ready, queued move");
-      }
+      client.send(`move:${randomX},${randomY}`);
     });
 
     nameInput.addEventListener('change', () => {
       const name = nameInput.value.trim();
-      if (connectionState.ws && connectionState.ws.readyState === WebSocket.OPEN && name) {
-        connectionState.ws.send(`name:${name}`);
-      }
+      if (name) client.send(`name:${name}`);
     });
 
     toggleRetryBtn.addEventListener('click', () => {
-      connectionState.retryEnabled = !connectionState.retryEnabled;
-      toggleRetryBtn.textContent = connectionState.retryEnabled ? '🛑 Stop Retry' : '▶️ Start Retry';
-
-      if (connectionState.retryEnabled && connectionState.status === 'disconnected') {
-        tryReconnect();
-      } else if (!connectionState.retryEnabled) {
-        clearTimeout(reconnectTimer);
-        clearInterval(reconnectCountdown);
-      }
-
-      updateStatusFromState();
+      client.toggleRetry();
+      toggleRetryBtn.textContent = client.retryEnabled ? '🛑 Stop Retry' : '▶️ Start Retry';
     });
 
-    connectWebSocket();
+    client.connect();
   </script>
+
+
 </body>
+
 </html>
