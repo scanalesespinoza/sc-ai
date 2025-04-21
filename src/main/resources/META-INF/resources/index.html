@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>🎮 Player Tracker (WebSocket + Smart Retry + ID)</title>
+  <style>
+    body {
+      margin: 0;
+      background: #111;
+      font-family: sans-serif;
+      color: #eee;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    h1 {
+      margin: 1rem;
+    }
+
+    #status {
+      padding: 0.5rem 1rem;
+      border-radius: 5px;
+      font-weight: bold;
+      margin-bottom: 1rem;
+    }
+
+    .green {
+      background: #2e7d32;
+      color: white;
+    }
+
+    .yellow {
+      background: #f9a825;
+      color: black;
+    }
+
+    .red {
+      background: #c62828;
+      color: white;
+    }
+
+    button {
+      padding: 0.6rem 1.2rem;
+      font-size: 1rem;
+      margin: 0.3rem;
+      border: none;
+      border-radius: 5px;
+      background-color: #2196f3;
+      color: white;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+
+    button:hover {
+      background-color: #1976d2;
+    }
+
+    #grid {
+      display: grid;
+      grid-template-columns: repeat(100, 10px);
+      grid-template-rows: repeat(100, 10px);
+      gap: 1px;
+      width: max-content;
+    }
+
+    .tile {
+      width: 10px;
+      height: 10px;
+      background: #333;
+      transition: background 0.2s;
+    }
+
+    .tile.player {
+      background: #4fc3f7;
+    }
+
+    .info {
+      margin-bottom: 1rem;
+      text-align: center;
+    }
+
+    input[type="text"] {
+      padding: 0.3rem;
+      font-size: 1rem;
+      border-radius: 5px;
+      border: none;
+      margin-left: 0.5rem;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>🎯 Track the Player (Real-Time)</h1>
+  <div id="status" class="yellow">Connecting...</div>
+
+  <div class="info">
+    <p>🧩 <strong>Session ID:</strong> <span id="sessionId">...</span></p>
+    <p>🙋 <strong>Display Name:</strong>
+      <input type="text" id="displayName" placeholder="Enter your name" />
+    </p>
+    <p>👥 <span id="sessionCount">0</span> active session(s)</p>
+  </div>
+
+  <div>
+    <button id="getBtn">🔄 Move Player</button>
+    <button id="toggleRetry">🛑 Stop Retry</button>
+  </div>
+
+  <div id="grid"></div>
+
+  <script>
+    const grid = document.getElementById('grid');
+    const statusDiv = document.getElementById('status');
+    const retryBtn = document.getElementById('toggleRetry');
+    const sessionIdSpan = document.getElementById('sessionId');
+    const sessionCountSpan = document.getElementById('sessionCount');
+    const nameInput = document.getElementById('displayName');
+
+    const tiles = [];
+    let lastPlayerIndex = -1;
+    let sessionId = null;
+    let ws = null;
+    let retryDelay = 5000;
+    let reconnectInterval = null;
+    let reconnectCountdown = null;
+    let retryEnabled = true;
+    const messageQueue = [];
+
+    for (let y = 0; y < 100; y++) {
+      for (let x = 0; x < 100; x++) {
+        const tile = document.createElement('div');
+        tile.classList.add('tile');
+        tile.dataset.x = x;
+        tile.dataset.y = y;
+        tiles.push(tile);
+        grid.appendChild(tile);
+      }
+    }
+
+    function updatePlayer(x, y) {
+      const index = y * 100 + x;
+      if (lastPlayerIndex !== -1 && tiles[lastPlayerIndex]) {
+        tiles[lastPlayerIndex].classList.remove('player');
+      }
+      if (tiles[index]) {
+        tiles[index].classList.add('player');
+        lastPlayerIndex = index;
+      }
+    }
+
+    function updateStatus(color, text) {
+      statusDiv.className = color;
+      statusDiv.textContent = text;
+    }
+
+    function startCountdown(seconds) {
+      let remaining = seconds;
+      updateStatus('red', `🔴 Disconnected... retrying in ${remaining}s`);
+      reconnectCountdown = setInterval(() => {
+        remaining--;
+        if (remaining > 0) {
+          updateStatus('red', `🔴 Disconnected... retrying in ${remaining}s`);
+        } else {
+          clearInterval(reconnectCountdown);
+        }
+      }, 1000);
+    }
+
+    function tryReconnect() {
+      if (retryEnabled) {
+        startCountdown(retryDelay / 1000);
+        reconnectInterval = setTimeout(() => {
+          connectWebSocket();
+        }, retryDelay);
+      } else {
+        updateStatus('red', `🔴 Disconnected (retry paused)`);
+      }
+    }
+
+    function connectWebSocket() {
+      if (ws && ws.readyState !== WebSocket.CLOSED) return;
+
+      ws = new WebSocket(`ws://${location.host}/player`);
+
+      ws.onopen = () => {
+        console.log("🔌 Connected");
+        updateStatus('green', '🟢 Connected (Real-Time)');
+        clearInterval(reconnectCountdown);
+        clearTimeout(reconnectInterval);
+
+        while (messageQueue.length > 0) {
+          ws.send(messageQueue.shift());
+        }
+
+        // If name was set before reconnect, send it again
+        const name = nameInput.value.trim();
+        if (name) {
+          ws.send(`name:${name}`);
+        }
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+
+          if (data.sessionId) {
+            sessionId = data.sessionId;
+            sessionIdSpan.textContent = sessionId;
+          } else if (data.type === "sessionCount") {
+            sessionCountSpan.textContent = data.count;
+          } else if (typeof data.x === "number" && typeof data.y === "number") {
+            updatePlayer(data.x, data.y);
+          }
+
+        } catch (e) {
+          console.error("Invalid message format", e);
+        }
+      };
+
+      ws.onerror = (err) => {
+        console.warn("⚠️ WebSocket error", err);
+        updateStatus('yellow', '🟡 Connection error...');
+      };
+
+      ws.onclose = () => {
+        console.warn("🔌 WebSocket closed");
+        tryReconnect();
+      };
+    }
+
+    document.getElementById('getBtn').addEventListener('click', () => {
+      const randomX = Math.floor(Math.random() * 100);
+      const randomY = Math.floor(Math.random() * 100);
+      const msg = `move:${randomX},${randomY}`;
+
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(msg);
+      } else {
+        console.warn("⏳ WebSocket not ready, queuing message");
+        messageQueue.push(msg);
+      }
+    });
+
+    retryBtn.addEventListener('click', () => {
+      retryEnabled = !retryEnabled;
+      retryBtn.textContent = retryEnabled ? '🛑 Stop Retry' : '▶️ Start Retry';
+      if (retryEnabled) {
+        loadSessions();
+      } else {
+        clearInterval(retryCountdown);
+        clearTimeout(retryTimer);
+        updateStatus('red', '🔴 Retry paused');
+      }
+    });
+
+    nameInput.addEventListener('change', () => {
+      const name = nameInput.value.trim();
+      if (ws && ws.readyState === WebSocket.OPEN && name) {
+        ws.send(`name:${name}`);
+      }
+    });
+
+    connectWebSocket();
+  </script>
+</body>
+
+</html>
