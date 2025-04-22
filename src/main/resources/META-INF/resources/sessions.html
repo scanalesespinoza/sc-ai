@@ -1,200 +1,190 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-  <meta charset="UTF-8" />
-  <title>👥 Active Sessions</title>
-  <style>
-    body {
-      font-family: 'Segoe UI', sans-serif;
-      background-color: #111;
-      color: #eee;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 2rem;
-    }
-
-    h1 {
-      color: #4fc3f7;
-      margin-bottom: 1rem;
-    }
-
-    #status {
-      padding: 0.5rem 1rem;
-      border-radius: 5px;
-      font-weight: bold;
-      margin-bottom: 1rem;
-    }
-
-    .green { background: #2e7d32; color: white; }
-    .yellow { background: #f9a825; color: black; }
-    .red { background: #c62828; color: white; }
-
-    #sessionList {
-      width: 100%;
-      max-width: 600px;
-    }
-
-    .session {
-      display: flex;
-      align-items: center;
-      background-color: #222;
-      margin-bottom: 0.8rem;
-      padding: 1rem;
-      border-radius: 10px;
-      box-shadow: 0 0 8px rgba(0, 0, 0, 0.3);
-    }
-
-    .emoji {
-      font-size: 1.5rem;
-      margin-right: 1rem;
-    }
-
-    .info {
-      display: flex;
-      flex-direction: column;
-    }
-
-    .name {
-      font-size: 1.1rem;
-      font-weight: bold;
-      color: #f9a825;
-    }
-
-    .name.not-set {
-      color: #888;
-      font-style: italic;
-    }
-
-    .id {
-      font-size: 0.9rem;
-      color: #aaa;
-    }
-
-    button {
-      margin-top: 1rem;
-      padding: 0.5rem 1rem;
-      border: none;
-      border-radius: 5px;
-      background-color: #2196f3;
-      color: white;
-      cursor: pointer;
-      transition: background 0.3s;
-    }
-
-    button:hover {
-      background-color: #1976d2;
-    }
-  </style>
-</head>
-<body>
-  <h1>👥 Active Sessions</h1>
-  <div id="status" class="yellow">Connecting to session service...</div>
-  <div id="sessionList">Loading...</div>
-  <button id="toggleRetry">🛑 Stop Retry</button>
-
-  <script>
-    const sessionList = document.getElementById('sessionList');
-    const status = document.getElementById('status');
-    const retryBtn = document.getElementById('toggleRetry');
-
-    let retryEnabled = true;
-    let retryCountdown = null;
-    let retryDelay = 5000;
-    let retryTimer = null;
-
-    function updateStatus(color, text) {
-      status.className = color;
-      status.textContent = text;
-    }
-
-    function startRetryCountdown(seconds) {
-      let remaining = seconds;
-      updateStatus('red', `🔴 Service unavailable... retrying in ${remaining}s`);
-      if (retryCountdown) clearInterval(retryCountdown);
-      retryCountdown = setInterval(() => {
-        remaining--;
-        if (remaining > 0) {
-          updateStatus('red', `🔴 Service unavailable... retrying in ${remaining}s`);
-        } else {
-          clearInterval(retryCountdown);
+    <meta charset="UTF-8" />
+    <title>👥 Active Sessions</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background-color: #111;
+            color: #eee;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 2rem;
         }
-      }, 1000);
-    }
 
-    function loadSessions() {
-      fetch('/sessions')
-        .then(res => {
-          if (!res.ok) throw new Error("Server returned " + res.status);
-          return res.json();
-        })
-        .then(data => {
-          clearInterval(retryCountdown);
-          clearTimeout(retryTimer);
-          updateStatus('green', '🟢 Connected to session service');
+        h1 {
+            color: #4fc3f7;
+            margin-bottom: 1rem;
+        }
 
-          const entries = Object.entries(data).sort(([, a], [, b]) => {
-            if (a && !b) return -1;
-            if (!a && b) return 1;
-            return 0;
-          });
+        #status {
+            padding: 0.5rem 1rem;
+            border-radius: 5px;
+            font-weight: bold;
+            margin-bottom: 1rem;
+        }
 
-          sessionList.innerHTML = '';
-          if (entries.length === 0) {
-            sessionList.innerHTML = '<p>No active sessions.</p>';
-            return;
-          }
+        .green {
+            background: #2e7d32;
+            color: white;
+        }
 
-          for (const [id, name] of entries) {
-            const sessionEl = document.createElement('div');
-            sessionEl.className = 'session';
+        .yellow {
+            background: #f9a825;
+            color: black;
+        }
 
-            const emoji = document.createElement('div');
-            emoji.className = 'emoji';
-            emoji.textContent = '🧑‍💻';
+        .red {
+            background: #c62828;
+            color: white;
+        }
 
-            const info = document.createElement('div');
-            info.className = 'info';
+        #sessionList {
+            width: 100%;
+            max-width: 600px;
+        }
 
-            const nameEl = document.createElement('div');
-            nameEl.className = 'name' + (name ? '' : ' not-set');
-            nameEl.textContent = name ? name : 'Friendly Name not set';
+        .session {
+            display: flex;
+            align-items: center;
+            background-color: #222;
+            margin-bottom: 0.8rem;
+            padding: 1rem;
+            border-radius: 10px;
+            box-shadow: 0 0 8px rgba(0, 0, 0, 0.3);
+        }
 
-            const idEl = document.createElement('div');
-            idEl.className = 'id';
-            idEl.textContent = 'ID: ' + id;
+        .emoji {
+            font-size: 1.5rem;
+            margin-right: 1rem;
+        }
 
-            info.appendChild(nameEl);
-            info.appendChild(idEl);
-            sessionEl.appendChild(emoji);
-            sessionEl.appendChild(info);
-            sessionList.appendChild(sessionEl);
-          }
-        })
-        .catch(err => {
-          console.warn("❌ Session service unavailable:", err.message);
-          if (retryEnabled) {
-            startRetryCountdown(retryDelay / 1000);
-            retryTimer = setTimeout(loadSessions, retryDelay);
-          } else {
-            updateStatus('red', '🔴 Retry paused');
-          }
+        .info {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .name {
+            font-size: 1.1rem;
+            font-weight: bold;
+            color: #f9a825;
+        }
+
+        .name.not-set {
+            color: #888;
+            font-style: italic;
+        }
+
+        .id {
+            font-size: 0.9rem;
+            color: #aaa;
+        }
+
+        button {
+            margin-top: 1rem;
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 5px;
+            background-color: #2196f3;
+            color: white;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background-color: #1976d2;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>👥 Active Sessions</h1>
+    <div id="status" class="yellow">Connecting...</div>
+    <div id="sessionList">Loading...</div>
+    <button id="toggleRetry">🛑 Stop Retry</button>
+
+    <script type="module">
+        import { RealtimeClient } from './realtime-client.js';
+
+        const status = document.getElementById('status');
+        const list = document.getElementById('sessionList');
+        const retryBtn = document.getElementById('toggleRetry');
+
+        const client = new RealtimeClient({
+            url: `ws://${location.host}/player`,
+            retryDelay: 5000,
+            onStatusChange: (color, text) => {
+                status.className = color;
+                status.textContent = text;
+            },
+            onMessage: () => {
+                // Every message → fetch new sessions (WebSocket is alive)
+                loadSessions();
+            }
         });
-    }
 
-    retryBtn.addEventListener('click', () => {
-      retryEnabled = !retryEnabled;
-      retryBtn.textContent = retryEnabled ? '🛑 Stop Retry' : '▶️ Start Retry';
-      if (retryEnabled) {
-        loadSessions();
-      } else {
-        clearInterval(retryCountdown);
-        clearTimeout(retryTimer);
-        updateStatus('red', '🔴 Retry paused');
-      }
-    });
+        async function loadSessions() {
+            try {
+                const res = await fetch('/sessions');
+                if (!res.ok) throw new Error("Failed to fetch sessions");
+                const sessions = await res.json();
 
-    loadSessions();
-  </script>
+                const sorted = Object.entries(sessions).sort(([, a], [, b]) => {
+                    if (a && !b) return -1;
+                    if (!a && b) return 1;
+                    return 0;
+                });
+
+                list.innerHTML = '';
+
+                if (sorted.length === 0) {
+                    list.innerHTML = '<p>No active sessions.</p>';
+                    return;
+                }
+
+                for (const [id, name] of sorted) {
+                    const sessionEl = document.createElement('div');
+                    sessionEl.className = 'session';
+
+                    const emoji = document.createElement('div');
+                    emoji.className = 'emoji';
+                    emoji.textContent = '🧑‍💻';
+
+                    const info = document.createElement('div');
+                    info.className = 'info';
+
+                    const nameEl = document.createElement('div');
+                    nameEl.className = 'name' + (name ? '' : ' not-set');
+                    nameEl.textContent = name || 'Friendly Name not set';
+
+                    const idEl = document.createElement('div');
+                    idEl.className = 'id';
+                    idEl.textContent = 'ID: ' + id;
+
+                    info.appendChild(nameEl);
+                    info.appendChild(idEl);
+                    sessionEl.appendChild(emoji);
+                    sessionEl.appendChild(info);
+                    list.appendChild(sessionEl);
+                }
+
+            } catch (err) {
+                console.warn("❌ Error loading sessions:", err.message);
+                list.innerHTML = `<p style="color:red">Failed to load sessions.</p>`;
+            }
+        }
+
+        retryBtn.addEventListener('click', () => {
+            client.toggleRetry();
+            retryBtn.textContent = client.retryEnabled ? '🛑 Stop Retry' : '▶️ Start Retry';
+        });
+
+        client.connect();
+        loadSessions(); // Initial load
+    </script>
 </body>
+
 </html>

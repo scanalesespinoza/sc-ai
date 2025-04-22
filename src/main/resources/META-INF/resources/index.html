@@ -116,6 +116,11 @@
     const statusDiv = document.getElementById('status');
     const toggleRetryBtn = document.getElementById('toggleRetry');
     const nameInput = document.getElementById('displayName');
+    const savedName = localStorage.getItem('friendlyName');
+    if (savedName) {
+      nameInput.value = savedName;
+    }
+
     const sessionIdSpan = document.getElementById('sessionId');
     const sessionCountSpan = document.getElementById('sessionCount');
 
@@ -164,10 +169,14 @@
       client.send(`move:${randomX},${randomY}`);
     });
 
-    nameInput.addEventListener('change', () => {
+    nameInput.addEventListener('input', () => {
       const name = nameInput.value.trim();
-      if (name) client.send(`name:${name}`);
+      localStorage.setItem('friendlyName', name);
+      if (client.status === 'connected' && name) {
+        client.send(`name:${name}`);
+      }
     });
+
 
     toggleRetryBtn.addEventListener('click', () => {
       client.toggleRetry();

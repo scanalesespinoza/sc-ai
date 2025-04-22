@@ -141,4 +141,5 @@ export class RealtimeClient {
                 this.onStatusChange('red', '❓ Unknown state');
         }
     }
+
 }
