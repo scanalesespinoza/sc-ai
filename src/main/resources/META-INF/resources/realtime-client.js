@@ -11,7 +11,6 @@ export class RealtimeClient {
         this.onMessage = onMessage || (() => { });
         this.onStatusChange = onStatusChange || (() => { });
         this.countingDown = false;
-
     }
 
     get status() {
@@ -42,11 +41,13 @@ export class RealtimeClient {
         this.ws.onmessage = (e) => {
             try {
                 const msg = JSON.parse(e.data);
+                if (!msg || typeof msg !== 'object') throw new Error("Not a JSON object");
                 this.onMessage(msg);
             } catch (err) {
                 console.warn("Invalid message", e.data);
             }
         };
+
 
         this.ws.onerror = () => {
             this.updateStatus();
@@ -56,6 +57,8 @@ export class RealtimeClient {
             this.updateStatus();
             this.tryReconnect();
         };
+
+        this.updateStatus();
     }
 
     send(message) {
@@ -93,25 +96,22 @@ export class RealtimeClient {
                     if (this.retryEnabled && this.status === 'disconnected') {
                         this.connect();
                     }
-                }, 0); // Connect immediately after countdown
+                }, 0);
             }
         }, 1000);
     }
 
-
     toggleRetry() {
         this.retryEnabled = !this.retryEnabled;
+        this.clearTimers();
 
         if (!this.retryEnabled) {
-            this.clearTimers();
             this.countingDown = false;
             this.onStatusChange('red', '🔴 Retry paused');
         } else {
-            this.updateStatus(); // Will call tryReconnect if needed
+            this.updateStatus();
         }
     }
-
-
 
     clearTimers() {
         clearTimeout(this.reconnectTimer);
@@ -120,7 +120,6 @@ export class RealtimeClient {
         this.countdownTimer = null;
         this.countingDown = false;
     }
-
 
     updateStatus() {
         switch (this.status) {
@@ -141,5 +140,4 @@ export class RealtimeClient {
                 this.onStatusChange('red', '❓ Unknown state');
         }
     }
-
 }

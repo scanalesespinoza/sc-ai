@@ -30,21 +30,33 @@ public class PlayerSocket {
     @OnMessage
     public void onMessage(String msg, Session session) {
         Player p = players.get(session);
-        if (p == null) return;
+        if (p == null)
+            return;
 
         if (msg.startsWith("move:")) {
             String[] parts = msg.substring(5).split(",");
             p.x = Integer.parseInt(parts[0]);
             p.y = Integer.parseInt(parts[1]);
+            broadcastPlayers(); // ✅ Broadcast after move
+            return;
         } else if (msg.startsWith("name:")) {
             p.name = msg.substring(5).trim();
+            broadcastPlayers();
+            return;
         } else if (msg.startsWith("avatar:")) {
             p.avatar = msg.substring(7).trim();
+            broadcastPlayers();
+            return;
         } else if (msg.startsWith("role:")) {
             p.role = msg.substring(5).trim();
+            broadcastPlayers();
+            return;
+        } else if (msg.startsWith("say:")) {
+            p.message = msg.substring(4).trim();
+            broadcastPlayers();
+            return;
         }
 
-        broadcastPlayers();
     }
 
     @OnClose
@@ -66,6 +78,7 @@ public class PlayerSocket {
             map.put("role", p.role);
             map.put("x", p.x);
             map.put("y", p.y);
+            map.put("message", p.message);
             return map;
         }).toList();
 
@@ -74,4 +87,13 @@ public class PlayerSocket {
             s.getAsyncRemote().sendText(json);
         }
     }
+
+    public Map<String, String> getSessionInfo() {
+        Map<String, String> sessions = new HashMap<>();
+        for (Player p : players.values()) {
+            sessions.put(p.sessionId, p.name == null || p.name.isEmpty() ? "" : p.name);
+        }
+        return sessions;
+    }
+
 }

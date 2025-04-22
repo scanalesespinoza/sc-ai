@@ -7,6 +7,8 @@ public class Player {
     public String role = "player";
     public int x = 0;
     public int y = 0;
+    public String message = "";
+
 
     public Player(String sessionId) {
         this.sessionId = sessionId;
