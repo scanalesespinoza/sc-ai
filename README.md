@@ -1,62 +1,122 @@
-# sc-ai
+# 🧙‍♂️ Player Tracker RPG
 
-This project uses Quarkus, the Supersonic Subatomic Java Framework.
+A real-time, multiplayer grid-based player tracker built with **WebSockets**, **Quarkus**, and a clean HTML/JS frontend.
 
-If you want to learn more about Quarkus, please visit its website: <https://quarkus.io/>.
+Each player controls an avatar on a 100x100 tile map and can:
+- Move to a random position
+- Choose avatar and role
+- Send chat bubbles or emotes 💬
+- See all players live, including direction of movement ↔️↕️
+- Leave fading trails when moving 🌀
+- Automatically restore their name, role, avatar, and position on refresh
 
-## Running the application in dev mode
+---
 
-You can run your application in dev mode that enables live coding using:
+## 🚀 Features
 
-```shell script
+- ✅ Real-time updates via WebSocket
+- ✅ Auto-reconnect with service status feedback (🟢🟡🔴)
+- ✅ Animated movement with jump & direction emojis
+- ✅ Persistent player identity with `localStorage`
+- ✅ Multiplayer emote/chat bubbles with fade-out
+- ✅ Live sessions view via `/sessions.html`
+- ✅ Modular `realtime-client.js` for shared logic
+
+---
+
+## 🛠 Technologies
+
+- **Frontend:** HTML, CSS, Vanilla JS
+- **Backend:** Java + Quarkus (`jakarta.websocket`)
+- **WebSocket API:** `/player` endpoint
+- **Live player storage:** in-memory `Map<Session, Player>`
+
+---
+
+## 📦 Project Structure
+
+```
+/src/main/java/com/scanales/
+│
+├── PlayerSocket.java      # WebSocket server
+├── Player.java            # Player data model
+│
+/resources/META-INF/
+│
+├── resources/static/
+│   ├── index.html         # Main game UI
+│   ├── sessions.html      # Realtime player list
+│   └── realtime-client.js # Shared WebSocket + retry logic
+```
+
+---
+
+## 🧪 How to Run
+
+### 1. Clone the repo
+
+```bash
+git clone https://github.com/your-username/player-tracker-rpg.git
+cd player-tracker-rpg
+```
+
+### 2. Run the backend (Quarkus)
+
+Make sure Java is installed (JDK 17+), then:
+
+```bash
 ./mvnw quarkus:dev
 ```
 
-> **_NOTE:_**  Quarkus now ships with a Dev UI, which is available in dev mode only at <http://localhost:8080/q/dev/>.
+This will launch the WebSocket server on:  
+`http://localhost:8080`
 
-## Packaging and running the application
+### 3. Open the frontend
 
-The application can be packaged using:
+Open [http://localhost:8080/index.html](http://localhost:8080/index.html) in your browser.
 
-```shell script
-./mvnw package
-```
+You can also open multiple tabs or devices to simulate different players!
 
-It produces the `quarkus-run.jar` file in the `target/quarkus-app/` directory.
-Be aware that it’s not an _über-jar_ as the dependencies are copied into the `target/quarkus-app/lib/` directory.
+### 4. Monitor sessions
 
-The application is now runnable using `java -jar target/quarkus-app/quarkus-run.jar`.
+Visit [http://localhost:8080/sessions.html](http://localhost:8080/sessions.html)  
+to see the list of connected players and their friendly names.
 
-If you want to build an _über-jar_, execute the following command:
+---
 
-```shell script
-./mvnw package -Dquarkus.package.jar.type=uber-jar
-```
+## 🧠 Developer Notes
 
-The application, packaged as an _über-jar_, is now runnable using `java -jar target/*-runner.jar`.
+- Player identity is stored client-side using `localStorage`
+- Each player gets a `sessionId` assigned by the server on connection
+- Messages (like `move:x,y`, `name:`, `say:`, etc.) are simple string commands
+- Emotes and text are shown in bubbles and removed after 10 seconds
+- Trail effects use animation and class-based styling
+- The `realtime-client.js` handles automatic retry, countdown, and queueing
 
-## Creating a native executable
+---
 
-You can create a native executable using:
+## 📸 Screenshots
 
-```shell script
-./mvnw package -Dnative
-```
+![Screenshot](./docs/screenshot-demo.png)
 
-Or, if you don't have GraalVM installed, you can run the native executable build in a container using:
+---
 
-```shell script
-./mvnw package -Dnative -Dquarkus.native.container-build=true
-```
+## 🧩 Future Ideas
 
-You can then execute your native executable with: `./target/sc-ai-1.0.0-SNAPSHOT-runner`
+- Avatar inventory or card deck system 🃏
+- Private chat or whispering between players 🔐
+- Mini-map or zoomed view 🔍
+- Multiplayer quests or item collection ✨
 
-If you want to learn more about building native executables, please consult <https://quarkus.io/guides/maven-tooling>.
+---
 
-## Provided Code
+## 👤 Author
 
-### REST
+Built by [@scanalesespinoza](https://github.com/scanalesespinoza)  
+Made with love, emoji, and WebSocket magic ✨
 
-Easily start your REST Web Services
+---
 
-[Related guide section...](https://quarkus.io/guides/getting-started-reactive#reactive-jax-rs-resources)
+## 📄 License
+
+MIT
