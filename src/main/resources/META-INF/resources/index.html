@@ -157,8 +157,10 @@
 
 <body>
   <h1>🧙‍♂️ Player Tracker RPG</h1>
-  <div id="status" class="yellow">Connecting...</div>
-
+  <div>
+    <div id="status" class="yellow">Connecting...</div>
+    <button id="toggleRetry">🛑 Stop Retry</button>
+  </div>
   <div>
     <label>🙋 Name: <input id="displayName" /></label>
     <label>🧑 Avatar:
@@ -189,7 +191,6 @@
 
   <div>
     <button id="moveBtn">🔄 Move</button>
-    <button id="toggleRetry">🛑 Stop Retry</button>
   </div>
 
   <div id="grid"></div>
@@ -203,6 +204,10 @@
     const roleSelect = document.getElementById('role');
     const toggleRetryBtn = document.getElementById('toggleRetry');
     const grid = document.getElementById('grid');
+    const previousPositions = new Map(); // sessionId → { x, y }
+    const x = parseInt(localStorage.getItem('lastMyX')) || 0;
+    const y = parseInt(localStorage.getItem('lastMyY')) || 0;
+
 
     const tiles = Array.from({ length: 10000 }, () => {
       const t = document.createElement('div');
@@ -213,8 +218,10 @@
 
     let sessionId = null;
     let lastMyIndex = -1;
-    let lastMyX = 0;
-    let lastMyY = 0;
+    let lastMyX = x;
+    let lastMyY = y;
+    localStorage.setItem('lastMyX', x);
+    localStorage.setItem('lastMyY', y);
 
     const playerMap = new Map();
 
@@ -228,6 +235,13 @@
       onMessage: (data) => {
         if (data.sessionId) {
           sessionId = data.sessionId;
+
+          // Now we’re sure we’re connected as a specific player 🎯
+          const storedX = parseInt(localStorage.getItem('lastMyX'));
+          const storedY = parseInt(localStorage.getItem('lastMyY'));
+          if (!isNaN(storedX) && !isNaN(storedY)) {
+            client.send(`move:${storedX},${storedY}`);
+          }
         } else if (data.type === 'players') {
           renderPlayers(data.players);
           if (data.type === 'players') {
@@ -257,6 +271,16 @@
 
       playerMap.clear();
       players.forEach(p => {
+        const previous = previousPositions.get(p.sessionId);
+        if (previous && p.sessionId !== sessionId) {
+          const oldIndex = previous.y * 100 + previous.x;
+          const oldTile = tiles[oldIndex];
+          if (oldTile) {
+            oldTile.innerHTML = '';
+            oldTile.className = 'tile'; // reset all visual effects
+          }
+        }
+
         playerMap.set(p.sessionId, p);
         const index = p.y * 100 + p.x;
         const tile = tiles[index];
@@ -330,15 +354,17 @@
             lastMyX = p.x;
             lastMyY = p.y;
             lastMyIndex = index;
+            previousPositions.set(p.sessionId, { x: p.x, y: p.y });
+
           } else {
             tile.innerHTML = '';
             tile.textContent = p.avatar;
-
-            tile.style.backgroundColor = '#444';
           }
 
 
         }
+        previousPositions.set(p.sessionId, { x: p.x, y: p.y });
+
       });
     }
 
@@ -360,8 +386,13 @@
     document.getElementById('moveBtn').addEventListener('click', () => {
       const x = Math.floor(Math.random() * 100);
       const y = Math.floor(Math.random() * 100);
+      lastMyX = x;
+      lastMyY = y;
+      localStorage.setItem('lastMyX', x);
+      localStorage.setItem('lastMyY', y);
       client.send(`move:${x},${y}`);
     });
+
 
     toggleRetryBtn.addEventListener('click', () => {
       client.toggleRetry();
@@ -377,6 +408,7 @@
     if (storedRole) roleSelect.value = storedRole;
 
     client.connect();
+
 
     // Initial send if data exists
     if (storedName) client.send(`name:${storedName}`);
