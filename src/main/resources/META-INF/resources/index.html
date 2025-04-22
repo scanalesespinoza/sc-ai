@@ -87,6 +87,7 @@
       background-color: #2c3e50 !important;
       /* darker than normal */
     }
+    
   </style>
 </head>
 
@@ -142,6 +143,9 @@
 
     let sessionId = null;
     let lastMyIndex = -1;
+    let lastMyX = 0;
+    let lastMyY = 0;
+
     const playerMap = new Map();
 
     const client = new RealtimeClient({
@@ -194,10 +198,34 @@
           tile.title = `${p.name || 'Anonymous'} (${p.role})`;
           if (p.sessionId === sessionId) {
             tile.style.backgroundColor = '#4fc3f7';
-            lastMyIndex = index; // 🔁 update to track your current tile
+
+            // Determine direction
+            let directionEmoji = p.avatar;
+            if (typeof lastMyX === 'number' && typeof lastMyY === 'number') {
+              if (p.x > lastMyX) directionEmoji = '➡️';
+              else if (p.x < lastMyX) directionEmoji = '⬅️';
+              else if (p.y > lastMyY) directionEmoji = '⬇️';
+              else if (p.y < lastMyY) directionEmoji = '⬆️';
+            }
+
+            tile.textContent = directionEmoji;
+
+            tile.textContent = directionEmoji;
+
+            // Optionally reset to original avatar after delay
+            setTimeout(() => {
+              if (tiles[index] && p.sessionId === sessionId) {
+                tiles[index].textContent = p.avatar;
+              }
+            }, 600);
+            lastMyX = p.x;
+            lastMyY = p.y;
+            lastMyIndex = index;
           } else {
+            tile.textContent = p.avatar;
             tile.style.backgroundColor = '#444';
           }
+
 
         }
       });
@@ -243,6 +271,7 @@
     if (storedName) client.send(`name:${storedName}`);
     if (storedAvatar) client.send(`avatar:${storedAvatar}`);
     if (storedRole) client.send(`role:${storedRole}`);
+
   </script>
 </body>
 
