@@ -144,6 +144,14 @@
       display: inline-block;
       z-index: 1;
     }
+
+    .tile.trail {
+      background-color: #2c3e50 !important;
+    }
+
+    .tile.default {
+      background-color: #333 !important;
+    }
   </style>
 </head>
 
@@ -234,10 +242,14 @@
         const lastTile = tiles[lastMyIndex];
         if (lastTile) {
           lastTile.textContent = '';
-          lastTile.style.backgroundColor = '#2c3e50';
-          lastTile.classList.remove('fade');
+          lastTile.classList.remove('fade', 'jump');
+          lastTile.classList.add('trail');
 
-          setTimeout(() => lastTile.classList.remove('trail'), 600);
+          setTimeout(() => {
+            lastTile.classList.remove('trail');
+            lastTile.classList.add('default');
+          }, 600);
+
         }
       }
 
@@ -248,6 +260,7 @@
         playerMap.set(p.sessionId, p);
         const index = p.y * 100 + p.x;
         const tile = tiles[index];
+
         if (tile) {
           tile.innerHTML = '';
 
@@ -256,7 +269,7 @@
           emojiSpan.className = 'emoji';
           tile.textContent = p.avatar;
           console.log(p.avatar);
-          
+
           tile.appendChild(emojiSpan);
 
 
